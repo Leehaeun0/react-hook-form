@@ -4,6 +4,7 @@ import isKey from './isKey';
 import isObject from './isObject';
 import stringToPath from './stringToPath';
 
+// set(obj, 'user.name', 'John'); // 결과: { user: { name: 'John' }
 export default (object: FieldValues, path: string, value?: unknown) => {
   let index = -1;
   const tempPath = isKey(path) ? [path] : stringToPath(path);

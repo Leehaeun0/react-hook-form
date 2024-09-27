@@ -116,11 +116,15 @@ export function createFormControl<
     errors: _options.errors || {},
     disabled: _options.disabled || false,
   };
+  // 각 필드의 상태와 설정을 관리
   let _fields: FieldRefs = {};
   let _defaultValues =
     isObject(_options.defaultValues) || isObject(_options.values)
       ? cloneObject(_options.defaultValues || _options.values) || {}
       : {};
+  /**
+   * 제출하는 폼 값. 실제 사용자 입력 값을 저장하고 관리한다.
+   */
   let _formValues = _options.shouldUnregister
     ? {}
     : cloneObject(_defaultValues);
@@ -132,6 +136,7 @@ export function createFormControl<
   let _names: Names = {
     mount: new Set(),
     unMount: new Set(),
+    // 여기에 네임 목록을 저장
     array: new Set(),
     watch: new Set(),
   };
@@ -146,6 +151,7 @@ export function createFormControl<
     isValid: false,
     errors: false,
   };
+  // 옵저버 패턴의 subject들
   const _subjects: Subjects<TFieldValues> = {
     values: createSubject(),
     array: createSubject(),
@@ -177,6 +183,9 @@ export function createFormControl<
     }
   };
 
+  /**
+   * validate 중인 state 관련 업데이트
+   */
   const _updateIsValidating = (names?: string[], isValidating?: boolean) => {
     if (_proxyFormState.isValidating || _proxyFormState.validatingFields) {
       (names || Array.from(_names.mount)).forEach((name) => {
@@ -284,7 +293,8 @@ export function createFormControl<
       isUndefined(defaultValue) ||
       (ref && (ref as HTMLInputElement).defaultChecked) ||
       shouldSkipSetValueAs
-        ? set(
+        ? // _formValues 등록
+          set(
             _formValues,
             name,
             shouldSkipSetValueAs ? defaultValue : getFieldValue(field._f),
@@ -442,6 +452,7 @@ export function createFormControl<
       valid: true,
     },
   ) => {
+    // 모든 fields 객체를 돌음
     for (const name in fields) {
       const field = fields[name];
 
@@ -451,6 +462,7 @@ export function createFormControl<
         if (_f) {
           const isFieldArrayRoot = _names.array.has(_f.name);
           _updateIsValidating([name], true);
+          // validate 여부 체크
           const fieldError = await validateField(
             field,
             _formValues,
@@ -470,7 +482,8 @@ export function createFormControl<
           !shouldOnlyCheckValid &&
             (get(fieldError, _f.name)
               ? isFieldArrayRoot
-                ? updateFieldArrayRootError(
+                ? // 이곳에서 errors객체에 에러 상태 업데이트를 진행
+                  updateFieldArrayRootError(
                     _formState.errors,
                     fieldError,
                     _f.name,
@@ -713,6 +726,7 @@ export function createFormControl<
         );
       const watched = isWatched(name, _names, isBlurEvent);
 
+      // 실제 사용자한테 전달하는 _formValues를 여기서 업데이트 함
       set(_formValues, name, fieldValue);
 
       if (isBlurEvent) {
@@ -926,6 +940,7 @@ export function createFormControl<
       | WatchObserver<TFieldValues>,
     defaultValue?: DeepPartial<TFieldValues>,
   ) =>
+    // watch도 subscribe 방식을 사용하고 있음
     isFunction(name)
       ? _subjects.values.subscribe({
           next: (payload) =>
@@ -995,9 +1010,11 @@ export function createFormControl<
   };
 
   const register: UseFormRegister<TFieldValues> = (name, options = {}) => {
+    // 전체필드에서 name path에 해당하는 값을 가져옴
     let field = get(_fields, name);
     const disabledIsDefined = isBoolean(options.disabled);
 
+    // _fields 에 name에 해당하는 상태 업데이트
     set(_fields, name, {
       ...(field || {}),
       _f: {
@@ -1010,6 +1027,7 @@ export function createFormControl<
     _names.mount.add(name);
 
     if (field) {
+      // options.disabled 이 true일경우 disabled 처리함
       _updateDisabledField({
         field,
         disabled: options.disabled,
@@ -1017,6 +1035,7 @@ export function createFormControl<
         value: options.value,
       });
     } else {
+      // _formValues 등록
       updateValidAndValue(name, true, options.value);
     }
 
@@ -1035,6 +1054,7 @@ export function createFormControl<
       name,
       onChange,
       onBlur: onChange,
+      // callbackRef
       ref: (ref: HTMLInputElement | null): void => {
         if (ref) {
           register(name, options);
@@ -1113,26 +1133,32 @@ export function createFormControl<
   };
 
   const handleSubmit: UseFormHandleSubmit<TFieldValues> =
+    // 보통 사용자가 이렇게 사용함 handleSubmit(onSubmit)
     (onValid, onInvalid) => async (e) => {
       let onValidError = undefined;
       if (e) {
+        // form의 preventDefault 무효화
         e.preventDefault && e.preventDefault();
         e.persist && e.persist();
       }
       let fieldValues = cloneObject(_formValues);
 
+      // 상태 업데이트. 이때 state를 구독하고 있는 useForm의 formState 상태도 업데이트 됌
       _subjects.state.next({
         isSubmitting: true,
       });
 
+      // 사용자가 옵션에 resolver를 줬다면 유효성 체크를 resolver를 사용해서 진행
       if (_options.resolver) {
         const { errors, values } = await _executeSchema();
         _formState.errors = errors;
         fieldValues = values;
+        // 그렇지 않다면 기본 유효성 체크 진행
       } else {
         await executeBuiltInValidation(_fields);
       }
 
+      // 주어진 객체에서 주어진 path의 속성을 제거함
       unset(_formState.errors, 'root');
 
       if (isEmptyObject(_formState.errors)) {
@@ -1140,18 +1166,21 @@ export function createFormControl<
           errors: {},
         });
         try {
+          // onValid 함수에 fieldValues를 전달한다.
           await onValid(fieldValues as TFieldValues, e);
         } catch (error) {
           onValidError = error;
         }
       } else {
         if (onInvalid) {
+          // onInvalid 함수에는 _formState.errors 정보를 전달
           await onInvalid({ ..._formState.errors }, e);
         }
         _focusError();
         setTimeout(_focusError);
       }
 
+      // formState 상태 업데이트
       _subjects.state.next({
         isSubmitted: true,
         isSubmitting: false,
