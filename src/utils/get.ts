@@ -3,6 +3,18 @@ import isNullOrUndefined from './isNullOrUndefined';
 import isObject from './isObject';
 import isUndefined from './isUndefined';
 
+/**
+중첩된 값을 가져올 수 있는 함수
+const obj = {
+  user: {
+    name: 'John',
+    address: {
+      city: 'New York'
+    }
+  }
+};
+const name = get(obj, 'user.name'); // 결과: 'John'
+*/
 export default <T>(object: T, path?: string, defaultValue?: unknown): any => {
   if (!path || !isObject(object)) {
     return defaultValue;
